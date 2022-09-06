@@ -1,9 +1,8 @@
 ## Overview
 
-A sample project to demonstrate that a WebKit internal crash/bug occurs when on (Intel Mac/Xcode14 beta5/Simulator/iOS16) and running `WKWebView.evaluateJavaScript(..) {} `. The closure passed does not get called and a WebKit crash is logged in console.
+A sample project to demonstrate that a WebKit internal crash/bug occurs when on (Xcode14 beta5/Simulator/iOS16) and running `WKWebView.evaluateJavaScript(..) {} `. The closure passed does not get called and a WebKit crash is logged in console.
 
 This happens only when all the cases are met:
-* Developer on Intel Mac
 * Xcode 14 beta5
 * Simulator on iOS 16
   
@@ -22,9 +21,6 @@ The eror logs that show a WebKit crash:
 Sometimes this is accompanied by a crash related to PosterBoard.app similar to what is mentioned in the forum [here](https://developer.apple.com/forums/thread/711121)
 
 ## Steps to reproduce
-
-### Preprequisites
-Use an Intel mac
 
 ### Failure case, run on iOS16/Xc14b5
 Steps:
