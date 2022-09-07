@@ -6,27 +6,76 @@ import XCTest
 import WebKit
 @testable import WebKitBugExample
 
-class WebKitBugExampleTests: XCTestCase {
+class WebKitBugExampleTests: XCTestCase, WKNavigationDelegate {
     
-    var wkWebView: WKWebView!
-
-    func testShowWebKitErrorExample() throws {
-        
+    lazy var wkWebView: WKWebView = {
         let config = WKWebViewConfiguration()
-        let htmlStr = "<!DOCTYPE html><html> <body> <button type=\"button\" onclick=\"myFunction()\" id=\"someElement\" >My Button</button> </body> </html>"
-        var isDefinedResult: Bool? = nil
-        
-        wkWebView = WKWebView(frame: CGRect.init(x: 0, y: 0, width: 500, height: 900), configuration: config)
-        wkWebView.loadHTMLString(htmlStr, baseURL: Bundle.main.resourceURL)
-        wkWebView.evaluateJavaScript("document.getElementById('someElement').innerText") { (result, error) in
-            print("-> Entered evaluateJavaScript() closure")
-            dump(result)
-            dump(error)
-            isDefinedResult = (result as? Bool) ?? false
+        let webView = WKWebView(frame: CGRect(origin: .zero, size: CGSize(width: 500, height: 500)), configuration: config)
+        webView.navigationDelegate = self
+        return webView
+    }()
+
+    var onFinishNavigation: ((WKNavigation) -> Void)? = nil
+    var onFailWithError: ((WKNavigation, Error) -> Void)? = nil
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        print("start: \(navigation.debugDescription)")
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        print("commit: \(navigation.debugDescription)")
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if webView == self.wkWebView {
+            onFinishNavigation?(navigation)
         }
-        
-        XCTestCase.waitUntil(timeout: 30, isDefinedResult != nil)
-        print("-> Printing final value of isDefinedResult: \(isDefinedResult)")
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        if webView == self.wkWebView {
+            onFailWithError?(navigation, error)
+        }
+    }
+
+    @MainActor
+    func testShowWebKitErrorExample() throws {
+        let expectation = XCTestExpectation(description: #function)
+        var loadNavigation: WKNavigation? = nil
+        let htmlStr = """
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <button type="button" onclick="myFunction()" id="someElement">
+                My Button
+            </button>
+        </body>
+        </html>
+        """
+        onFinishNavigation = { navigation in
+            if navigation == loadNavigation {
+                Task { [wkWebView = self.wkWebView] in
+                    do {
+                        let evalutatedResult = try await wkWebView.evaluateJavaScript("document.getElementById('someElement').innerText")
+                        let result = (evalutatedResult as? Bool) ?? false
+                        dump(result)
+                        XCTAssertTrue(result, "Failed to satisfy the condition")
+                        expectation.fulfill()
+                        print("-> Printing final value of isDefinedResult: \(result)")
+                    } catch {
+                        dump(error)
+                        XCTFail(error.localizedDescription)
+                    }
+                }
+            }
+        }
+        onFailWithError = { navigation, error in
+            if navigation == loadNavigation {
+                XCTFail(error.localizedDescription)
+            }
+        }
+        loadNavigation = wkWebView.loadHTMLString(htmlStr, baseURL: Bundle.main.resourceURL)
+        wait(for: [expectation], timeout: 10.0)
     }
 }
 
