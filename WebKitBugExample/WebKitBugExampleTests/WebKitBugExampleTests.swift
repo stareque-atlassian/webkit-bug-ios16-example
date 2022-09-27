@@ -8,6 +8,8 @@ import WebKit
 
 class WebKitBugExampleTests: XCTestCase, WKNavigationDelegate {
     
+    static let defaultTimeout: TimeInterval = 5.0
+    
     lazy var wkWebView: WKWebView = {
         let config = WKWebViewConfiguration()
         let webView = WKWebView(frame: CGRect(origin: .zero, size: CGSize(width: 500, height: 500)), configuration: config)
@@ -37,9 +39,46 @@ class WebKitBugExampleTests: XCTestCase, WKNavigationDelegate {
             onFailWithError?(navigation, error)
         }
     }
+    
+    func testShowWebKitErrorExample() throws {
+        let expectation = XCTestExpectation(description: #function)
+        var loadNavigation: WKNavigation? = nil
+        let htmlStr = """
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <button type="button" onclick="myFunction()" id="someElement">
+                My Button
+            </button>
+        </body>
+        </html>
+        """
+        onFinishNavigation = { [webView = self.wkWebView] navigation in
+            if navigation == loadNavigation {
+                webView.evaluateJavaScript("document.getElementById('someElement').innerText") { (result, error) in
+                    print("-> Entered evaluateJavaScript() closure")
+                    dump(result)
+                    dump(error)
+                    let resultString = result as? String ?? ""
+                    XCTAssertEqual(resultString, "My Button")
+                    expectation.fulfill()
+                }
+            }
+        }
+        onFailWithError = { navigation, error in
+            if navigation == loadNavigation {
+                XCTFail(error.localizedDescription)
+            }
+        }
+        
+        loadNavigation = wkWebView.loadHTMLString(htmlStr, baseURL: Bundle.main.resourceURL)
+        
+        wait(for: [expectation], timeout: Self.defaultTimeout)
+    }
+
 
     @MainActor
-    func testShowWebKitErrorExample() throws {
+    func testShowWebKitErrorExampleWithActor() throws {
         let expectation = XCTestExpectation(description: #function)
         var loadNavigation: WKNavigation? = nil
         let htmlStr = """
@@ -57,9 +96,9 @@ class WebKitBugExampleTests: XCTestCase, WKNavigationDelegate {
                 Task { [wkWebView = self.wkWebView] in
                     do {
                         let evalutatedResult = try await wkWebView.evaluateJavaScript("document.getElementById('someElement').innerText")
-                        let result = (evalutatedResult as? Bool) ?? false
+                        let result = evalutatedResult as? String ?? ""
                         dump(result)
-                        XCTAssertTrue(result, "Failed to satisfy the condition")
+                        XCTAssertEqual(result, "My Button")
                         expectation.fulfill()
                         print("-> Printing final value of isDefinedResult: \(result)")
                     } catch {
@@ -74,26 +113,10 @@ class WebKitBugExampleTests: XCTestCase, WKNavigationDelegate {
                 XCTFail(error.localizedDescription)
             }
         }
+        
         loadNavigation = wkWebView.loadHTMLString(htmlStr, baseURL: Bundle.main.resourceURL)
-        wait(for: [expectation], timeout: 10.0)
-    }
-}
-
-public extension XCTestCase {
-    static let defaultTimeout: TimeInterval = 30.0
-    static let defaultPollingInterval: TimeInterval = 0.2
-
-    static func waitUntil(timeout: TimeInterval = XCTestCase.defaultTimeout,
-                          file: StaticString = #file,
-                          line: UInt = #line,
-                          _ condition: @autoclosure () -> Bool) {
-        let timeoutDate = Date(timeIntervalSinceNow: timeout)
-
-        while (!condition() && timeoutDate.timeIntervalSinceNow > 0) {
-            RunLoop.current.run(until: Date(timeIntervalSinceNow: XCTestCase.defaultPollingInterval))
-        }
-
-        XCTAssertTrue(condition(), "Failed to satisfy the condition", file: file, line: line)
+        
+        wait(for: [expectation], timeout: Self.defaultTimeout)
     }
 
 }
